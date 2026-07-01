@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Order Dashboard</title>
+<style>
+  :root {
+    --bg: #f0f4f8; --surface: #fff; --surface2: #f8fafc; --border: #e2e8f0;
+    --primary: #2563eb; --primary-light: #dbeafe; --text: #1e293b; --text-muted: #64748b;
+    --success: #16a34a; --warning: #d97706; --danger: #dc2626; --shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header { background: var(--primary); color: #fff; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  header h1 { font-size: 1.15rem; font-weight: 700; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .data-info { font-size: 0.72rem; opacity: 0.85; margin-top: 2px; }
+  .refresh-btn { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.4); color: #fff; border-radius: 8px; padding: 6px 16px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; font-weight: 600; }
+  .refresh-btn:hover { background: rgba(255,255,255,0.28); }
+
+  .refresh-banner { background: #1e40af; color: #bfdbfe; padding: 10px 20px; font-size: 0.8rem; display: flex; align-items: center; gap: 10px; }
+  .refresh-banner strong { color: #fff; }
+
+  .filter-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+  select, input[type=search] { border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 0.8rem; background: var(--surface2); color: var(--text); outline: none; }
+  select:focus, input[type=search]:focus { border-color: var(--primary); background: #fff; }
+  select { min-width: 150px; }
+  .search-input { width: 220px; }
+  .stats-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+  .stat-pill { background: var(--primary-light); color: var(--primary); border-radius: 20px; padding: 4px 12px; font-size: 0.73rem; font-weight: 700; white-space: nowrap; }
+  .stat-pill.red { background: #fee2e2; color: #991b1b; }
+
+  .app { display: flex; height: calc(100vh - 145px); }
+
+  .sidebar { width: 255px; min-width: 255px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-section { padding: 11px 13px 8px; border-bottom: 1px solid var(--border); }
+  .sidebar-section.scrollable { border-bottom: none; flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .sidebar-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 7px; }
+
+  .chip-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .type-chip-list { display: flex; gap: 5px; flex-wrap: wrap; }
+  .type-chip { border: 1.5px solid var(--border); background: var(--surface2); border-radius: 20px; padding: 4px 12px; font-size: 0.78rem; cursor: pointer; transition: all 0.12s; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+  .type-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .type-chip:hover:not(.active) { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .chip { border: 1.5px solid var(--border); background: var(--surface2); border-radius: 20px; padding: 3px 10px; font-size: 0.73rem; cursor: pointer; transition: all 0.12s; color: var(--text); font-weight: 500; white-space: nowrap; }
+  .chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .chip .ct { display: inline-block; background: rgba(0,0,0,0.12); border-radius: 10px; padding: 0 5px; font-size: 0.66rem; margin-left: 3px; }
+  .chip.active .ct { background: rgba(255,255,255,0.25); }
+
+  .prop-list { flex: 1; }
+  .prop-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 13px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.1s; font-size: 0.78rem; }
+  .prop-item:hover { background: var(--primary-light); border-left-color: #93c5fd; }
+  .prop-item.active { background: var(--primary-light); border-left-color: var(--primary); font-weight: 600; color: var(--primary); }
+  .prop-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prop-badge { background: #f1f5f9; border-radius: 10px; padding: 1px 7px; font-size: 0.66rem; color: var(--text-muted); font-weight: 600; flex-shrink: 0; margin-left: 6px; }
+  .prop-item.active .prop-badge { background: var(--primary); color: #fff; }
+
+  .main { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 13px; }
+
+  .view-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .view-title { font-size: 1.05rem; font-weight: 700; }
+  .view-subtitle { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+  .clear-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 4px 12px; font-size: 0.73rem; cursor: pointer; color: var(--text-muted); transition: all 0.12s; }
+  .clear-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .summary-cards { display: flex; gap: 10px; flex-wrap: wrap; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 15px; flex: 1; min-width: 100px; box-shadow: var(--shadow); }
+  .card-label { font-size: 0.62rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+  .card-value { font-size: 1.25rem; font-weight: 700; }
+  .green { color: var(--success); } .amber { color: var(--warning); } .red { color: var(--danger); }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+  .table-header { padding: 9px 13px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); border-radius: 10px 10px 0 0; }
+  .table-title { font-size: 0.8rem; font-weight: 700; }
+  .results-count { font-size: 0.7rem; color: var(--text-muted); }
+  .table-scroll { overflow-x: auto; border-radius: 0 0 10px 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.77rem; }
+  thead th { padding: 7px 11px; text-align: left; font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--surface2); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover, thead th.sorted { color: var(--primary); }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--primary-light); }
+  tbody td { padding: 7px 11px; vertical-align: top; }
+  .wo-num { font-weight: 700; color: var(--primary); font-size: 0.8rem; white-space: nowrap; text-decoration: none; }
+  a.wo-num:hover { text-decoration: underline; }
+  .af-link { display: block; color: var(--primary); text-decoration: none; font-size: 0.68rem; margin-top: 2px; opacity: 0.8; }
+  .af-link:hover { text-decoration: underline; opacity: 1; }
+  .status-pill { display: inline-block; border-radius: 12px; padding: 2px 8px; font-size: 0.66rem; font-weight: 700; white-space: nowrap; }
+  .s-Assigned { background: #fef3c7; color: #92400e; }
+  .s-New { background: #fee2e2; color: #991b1b; }
+  .s-Scheduled { background: #e0e7ff; color: #3730a3; }
+  .s-WorkDone { background: #d1fae5; color: #065f46; }
+  .s-Completed { background: #d1fae5; color: #065f46; }
+  .s-Canceled { background: #f1f5f9; color: #94a3b8; }
+  .s-Estimate { background: #fce7f3; color: #9d174d; }
+  .p-Urgent { color: var(--danger); font-weight: 700; }
+  .p-Normal { color: var(--text-muted); }
+  .desc-text { max-width: 260px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; color: var(--text-muted); font-size: 0.72rem; }
+  .tag { display: inline-block; background: #f1f5f9; border-radius: 6px; padding: 1px 7px; font-size: 0.66rem; color: var(--text-muted); font-weight: 600; }
+  .age-pill { display: inline-block; border-radius: 12px; padding: 2px 8px; font-size: 0.66rem; font-weight: 700; white-space: nowrap; }
+  .age-ok     { background: #f1f5f9; color: var(--text-muted); }
+  .age-warn   { background: #fef9c3; color: #854d0e; }
+  .age-danger { background: #fee2e2; color: #991b1b; }
+  tr.row-warn   { background: #fffbeb !important; }
+  tr.row-warn:hover { background: #fef3c7 !important; }
+  tr.row-danger { background: #fff1f2 !important; }
+  tr.row-danger:hover { background: #ffe4e6 !important; }
+
+  .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 60px 20px; text-align: center; color: var(--text-muted); }
+  .welcome h2 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .welcome p { font-size: 0.83rem; max-width: 380px; line-height: 1.6; }
+  .welcome .arrow { font-size: 2rem; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>&#128295; Work Order Dashboard</h1>
+    <div class="data-info" id="data-info">Data as of July 1, 2026 &mdash; 61 work orders</div>
+  </div>
+  <div class="header-right">
+    <button class="refresh-btn" onclick="showRefreshInstructions()">&#8635; Refresh Data</button>
+  </div>
+</header>
+
+<div class="refresh-banner">
+  <span>&#128337;</span>
+  <span><strong>To get the latest data:</strong> click <em>Refresh Data</em> above, then ask Claude to regenerate this dashboard from the updated Drive file. A new file will be ready to replace this one.</span>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group">
+    <div class="filter-label">Status</div>
+    <select id="filter-status" onchange="applyFilters()">
+      <option value="open" selected>Open Only</option>
+      <option value="">All Statuses</option>
+      <option value="Assigned">Assigned</option>
+      <option value="New">New</option>
+      <option value="Scheduled">Scheduled</option>
+      <option value="Work Done">Work Done</option>
+      <option value="Completed">Completed</option>
+      <option value="Canceled">Canceled</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Type</div>
+    <div class="type-chip-list" id="type-chips"></div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Priority</div>
+    <select id="filter-priority" onchange="applyFilters()">
+      <option value="">All Priorities</option>
+      <option value="Urgent">Urgent</option>
+      <option value="Normal">Normal</option>
+    </select>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Search</div>
+    <input type="search" class="search-input" id="filter-search" placeholder="WO #, description, unit…" oninput="applyFilters()">
+  </div>
+  <div class="stats-row">
+    <span class="stat-pill" id="hdr-showing">— records</span>
+    <span class="stat-pill red" id="hdr-urgent">— urgent</span>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">&#128100; Person</div>
+      <div class="chip-list" id="people-chips"></div>
+    </div>
+    <div class="sidebar-section scrollable">
+      <div class="sidebar-label">&#127968; Property</div>
+      <div class="prop-list" id="prop-list"></div>
+    </div>
+  </aside>
+  <main class="main" id="main-content">
+    <div class="welcome">
+      <div class="arrow">&#8592;</div>
+      <h2>Select a person and/or property</h2>
+      <p>Use the filters above to narrow by status, type, or priority &mdash; then click a person <strong>and/or</strong> a property on the left. Both can be active at once to narrow results further.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+const OPEN_STATUSES = new Set(['Assigned','New','Scheduled','Estimate Requested']);
+const RAW = [{"Property": "1965 S. High St.", "Unit": "", "Status": "Scheduled", "Priority": "Normal", "Type": "Resident", "WONumber": "17152-1", "AssignedUser": null, "CreatedAt": "2026-05-13", "Description": "Washing machine in a shared/common area powers on but does not fill with water (no water coming in). Make/model unknown. No sparking or smoking reported.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17161/work_orders/18965"}, {"Property": "2295 S. Gilpin St.", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17257-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-05-25", "Description": "Garage entry door is broken and needs replacement. Tenant reports the door handle is also broken. Tenant can secure the door, and this door is not an entrance/exit to the home. Photo provided showing worn/damaged door with hardware visible.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17266/work_orders/19107"}, {"Property": "2495 E. Evans Ave.", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17190-1", "AssignedUser": "Chauncy Ursini, Spencer Price", "CreatedAt": "2026-05-19", "Description": "Main floor bathroom flooring has come up and crumbled; subfloor underneath appears rotted.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17199/work_orders/19016"}, {"Property": "2620 S. Race St.", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17377-1", "AssignedUser": null, "CreatedAt": "2026-06-14", "Description": "GARBAGE DISPOSAL: The Brux tenant called to report that the garbage disposal turns on but is not functioning properly. The tenant confirmed that nothing is jammed inside the unit. They have not yet attempted to press the reset button. No sparking or smoking has been reported. -8588\n\nBest Contact:\nBr", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17386/work_orders/19271"}, {"Property": "Alton", "Unit": "1663-1683-310", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17458-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-22", "Description": "OUTLET: Tenant Taylor called in to report that two outlets in their back bedroom does not produce electricity. No other outlets are affected. The outage is not affecting the fridge. They tried to reset the breakers. There is no GFCI. No signs of sparking or smoking. -8373\n\nBest contact number:\nTaylo", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17467/work_orders/19368"}, {"Property": "Arizona", "Unit": 3128, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17296-1", "AssignedUser": "Chauncy Ursini, John Galloway", "CreatedAt": "2026-06-01", "Description": "Tenant requests installation/provision of a screen door for the back door; currently there is no screen door present.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17305/work_orders/19155"}, {"Property": "Aspen Leaf", "Unit": 19, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17474-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-24", "Description": "SMOKE DETECTOR: Doesn't stop beeping.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17483/work_orders/19387"}, {"Property": "Aspen Leaf", "Unit": 21, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17471-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-24", "Description": "FAUCET-LEAK: Tenant Krystyna called in to report that the sink faucet outside of the bathroom is leaking. The faucet is dripping, though tenant Krystyna is not able to confirm if it is actively leaking. Tenant Krystyna is not able to shut the valve and is unable to contain the leak.-8475\n\n\n\n\n\nBest c", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17480/work_orders/19381"}, {"Property": "Aspen Leaf", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17448-1", "AssignedUser": null, "CreatedAt": "2026-06-20", "Description": "FENCE: Officer Jackson from the Arbata Police Department called in to report that a fence located around the parking lot sustained damage while a suspect was being taken into custody, resulting in a 3 by 2 ft hole that does not prevent anyone from entering the residence, and provided a risk manageme", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17457/work_orders/19358"}, {"Property": "Aspen Leaf", "Unit": 4, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17492-2", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-26", "Description": "KITCHEN DRAWERS: Are broken and coming apart can we please glue.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17501/work_orders/19409"}, {"Property": "Aspen Leaf", "Unit": 4, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17492-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-26", "Description": "KITCHEN DRAWERS: Are broken and coming apart can we please glue.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17501/work_orders/19408"}, {"Property": "Aspen Leaf", "Unit": 4, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17491-1", "AssignedUser": null, "CreatedAt": "2026-06-26", "Description": "WASHER & DRYER: Not working properly. Washer is not releasing water correctly and dryer is not drying and makes a horrible noise.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17500/work_orders/19407"}, {"Property": "Barcelona Apartments", "Unit": 8183, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17461-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-23", "Description": "Tenant reports a new, separate issue: kitchen cabinet door is still broken. Tenant states this condition has persisted since move-in and was not caused by tenant damage. Furniture type: cabinet (kitchen).", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17470/work_orders/19371"}, {"Property": "Barcelona Apartments", "Unit": 8183, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17460-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-23", "Description": "Tenant requests two new smoke detectors. Current smoke detector beeps intermittently. Tenant replaced the batteries but the issue is still not working.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17469/work_orders/19370"}, {"Property": "Barcelona Apartments", "Unit": 8183, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17459-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-23", "Description": "Dishwasher (Amana) turns on but is not functioning properly. Tenant reports it is not sparking or smoking.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17468/work_orders/19369"}, {"Property": "Barcelona Apartments", "Unit": 8171, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17457-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-22", "Description": "MAILBOX KEY: Tenant says he wasn't given a mailbox key at move-in. Please provide one.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17466/work_orders/19367"}, {"Property": "Barcelona Apartments", "Unit": 8103, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17453-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-21", "Description": "Tenant texted in stating that the handle in their bathroom shower broke and they cannot turn it off. Tenant reports that the water is actively running. The leak is containable, and they are unable to locate and turn the oval shaped shut off valves clockwise to stop the leak. -8576", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17462/work_orders/19363"}, {"Property": "Barcelona Apartments", "Unit": 8191, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17351-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-08", "Description": "Clothing/closet rack in the spare bedroom came off the wall and needs to be replaced.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17360/work_orders/19233"}, {"Property": "Barcelona Apartments", "Unit": 8165, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17176-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-05-18", "Description": "Refer to WO #16265-1.\n\nResident Update 05/18/2026: It's difficult to see very well but the steps are pretty steep and dangerous for me so I need something to hold on to so I can get up and down those stairs. I have added an image that shows an exterior entry area with a concrete walkway/steps leadin", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17185/work_orders/19000"}, {"Property": "Barcelona Apartments", "Unit": 8119, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "16922-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-04-17", "Description": "RANGE HOOD: Tenant Sulma called in to report that the kitchen range hood is peeling. They request to replace it. -8407\n\nBest Contact Number:\nSulma De Carrera\nPhone Number\n(720) 255-7501", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/16931/work_orders/18690"}, {"Property": "Barcelona Apartments", "Unit": 8119, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "16921-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-04-17", "Description": "ANTI-GREASE: Tenant Sulma called to report that they need anti -grease in the kitchen wall by the stove to avoid splashes. The stove does not have issue. -8407\n\nBest Contact Number:\nSulma De Carrera\nPhone Number\n(720) 255-7501", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/16930/work_orders/18689"}, {"Property": "Barcelona Apartments", "Unit": 8145, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17501-1", "AssignedUser": "John Galloway , Spencer Price", "CreatedAt": "2026-06-28", "Description": "GARBAGE DISPOSAL: Tenant Dulce called in to report that the garbage disposal is on but it is not working. Tenant has not tried pressing the reset button. The tenant did not reset the breaker box. There is nothing stuck inside. No sparking or smoking. -8560\n\n\n\n\n\nBEST CONTACT:\nDulce A. Cazarez\n(720) 4", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17510/work_orders/19430"}, {"Property": "Barcelona Apartments", "Unit": 8193, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17523-1", "AssignedUser": "John Galloway , Spencer Price", "CreatedAt": "2026-06-30", "Description": "SINK CLOGGED: Bathroom sink clogged", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17532/work_orders/19461"}, {"Property": "Barcelona Apartments", "Unit": 8125, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17514-1", "AssignedUser": "Courtney Tolentino, Deiby Magana", "CreatedAt": "2026-06-30", "Description": "UNIT - COCKROACHES: Tenant Ashley called to report a cockroach sightings throughout the kitchen and bathroom. They have used bug spray and traps. They are requesting pest control. -8591\n\nBest contact:\nAshley C. Rodriguez\nPhone Number\n(720) 822-2693", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17523/work_orders/19443"}, {"Property": "Barcelona Apartments", "Unit": 8125, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17513-1", "AssignedUser": "John Galloway , Spencer Price", "CreatedAt": "2026-06-30", "Description": "WASHER: Tenant Ashley called to report that their stackable washer does turn on but it leaks when in use. It is containable. Make is Electrolux but the model number is unknown. It is located at home. -8591\n\nBest contact:\nAshley C. Rodriguez\nPhone Number\n(720) 822-2693", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17522/work_orders/19442"}, {"Property": "Bryant Gardens", "Unit": "65-100", "Status": "Assigned", "Priority": "Urgent", "Type": "Resident", "WONumber": "17395-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-16", "Description": "KEYS: I was wondering if there was a way that we can get the keys to the hall closets in apartment building 1683,1666 and 9108, so we can have these closets open when they come to spray again, when I talk to maintenance, they said they believe the did not have the keys, and that they would probably", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17404/work_orders/19295"}, {"Property": "Bryant Gardens", "Unit": "85-102", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17505-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-29", "Description": "LIGHT: We have a light going out at 3285 S. Bryant Street 80110", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17514/work_orders/19434"}, {"Property": "Carr Street Flats", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17479-1", "AssignedUser": "Deiby Magana, John Galloway", "CreatedAt": "2026-06-24", "Description": "There appears to be a hive of bees in side the metal railing outside of unit 307/308 & a sticky substance drips down & lands on the concrete outside of unit 106.   See pictures", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17488/work_orders/19392"}, {"Property": "Carr Street Flats", "Unit": 103, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17478-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-24", "Description": "The overhead porch lights outside of unit 103 are burnt out", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17487/work_orders/19391"}, {"Property": "Carr Street Flats", "Unit": 203, "Status": "Assigned", "Priority": "Urgent", "Type": "Resident", "WONumber": "17399-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-17", "Description": "Tenant reports two AC units need to be checked: the living room wall/window unit is leaking water into the unit (dripping; tenant can contain with towels/container). The bedroom AC unit is making a strange noise. AC type: wall/window unit. There is another working AC unit in the home.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17408/work_orders/19299"}, {"Property": "Carr Street Flats", "Unit": 304, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17507-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-29", "Description": "FLOOR LIFTING- Please see pictures attached.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17516/work_orders/19436"}, {"Property": "Carr Street Flats", "Unit": 204, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17525-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-30", "Description": "TOILET REPLACEMENT- The prospective tenant, who is requesting to move in as soon as possible, has asked if the existing round toilet can be replaced with an elongated toilet. He is over 6 feet tall and believes an elongated toilet would be significantly more comfortable. Given that this accommodatio", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17534/work_orders/19463"}, {"Property": "Cottonwoods", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "16786-1", "AssignedUser": null, "CreatedAt": "2026-03-27", "Description": "LIGHTS: In the back area are not turning on, please fix.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/16795/work_orders/18510"}, {"Property": "Cottonwoods", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17407-1", "AssignedUser": null, "CreatedAt": "2026-06-17", "Description": "WINDOW SCREENS: In laundry room are off amd damged. Please fix.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17416/work_orders/19307"}, {"Property": "Cottonwoods", "Unit": 101, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17511-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-30", "Description": "KEYS: Tenant is requesting a copy of her current key please.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17520/work_orders/19440"}, {"Property": "Cottonwoods", "Unit": 101, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17526-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-30", "Description": "MAILBOX KEY: I need a mailbox key also I just realized", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17535/work_orders/19464"}, {"Property": "Dahlia Apartments", "Unit": 1, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17404-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-17", "Description": "DOOR: Tenant Denise called in to report that the bedroom closet door is off track. Tenant mention that it is a sliding door and 1 of the door they put it on track and the other one cannot be move. Tenant cannot secure it. -8569\n\n\nBest Contact:\nDenise Lopez\n720-939-4077", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17413/work_orders/19304"}, {"Property": "Dahlia Apartments", "Unit": 1, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17485-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-25", "Description": "WASHER: Tenant Denise called to report that the washer is on but it is not completing the cycle. Tenant was not able to provide the make and model number. It is located in a common area. No sparking or smoking. - 8414\n\nBest Contact Number: \n(720) 436-5524 \nDenise Lopez", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17494/work_orders/19399"}, {"Property": "Dahlia Apartments", "Unit": 11, "Status": "Assigned", "Priority": "Urgent", "Type": "Resident", "WONumber": "17509-1", "AssignedUser": null, "CreatedAt": "2026-06-29", "Description": "VIDEO FOOTAGE: Girlfriend broke front door glass. Please review footage 06/26/2026 at 3:40pm to provide to police Case #26-352984", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17518/work_orders/19438"}, {"Property": "Dahlia Apartments", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17498-1", "AssignedUser": null, "CreatedAt": "2026-06-26", "Description": "DOOR: Tenant called and said back door of the building has glass that is broken", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17507/work_orders/19427"}, {"Property": "Dexter Apartments", "Unit": 10, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17343-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-07", "Description": "Living room window blinds broke and fell down due to wind. Tenant provided photos showing blinds detached and lying on the floor and trim area above the window.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17352/work_orders/19225"}, {"Property": "Dexter Apartments", "Unit": 3, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17161-2", "AssignedUser": null, "CreatedAt": "2026-05-15", "Description": "SMOKE DETECTOR: Missing please install one.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17170/work_orders/18981"}, {"Property": "Lowry", "Unit": 1120, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17504-1", "AssignedUser": "Courtney Tolentino, Deiby Magana", "CreatedAt": "2026-06-29", "Description": "Resident reports spiders generally located in the living room and is requesting pest control service as soon as possible.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17513/work_orders/19433"}, {"Property": "Lowry", "Unit": 1120, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17503-1", "AssignedUser": "Courtney Tolentino, Deiby Magana", "CreatedAt": "2026-06-29", "Description": "Tenant reports ants in the bedroom. Tenant has not tried bug spray or bug traps yet. Requesting pest control as soon as possible.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17512/work_orders/19432"}, {"Property": "Lowry", "Unit": 1120, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17502-1", "AssignedUser": "Courtney Tolentino, Deiby Magana", "CreatedAt": "2026-06-29", "Description": "Resident reports seeing a cockroach in the master bedroom bathroom. Requests pest control as soon as possible.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17511/work_orders/19431"}, {"Property": "Lowry", "Unit": 1120, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17506-1", "AssignedUser": "Norberto Ayala", "CreatedAt": "2026-06-29", "Description": "Tenant reports dust and dirt blowing into the unit when the AC is running, coming through the vents. Tenant confirmed the AC filter was changed recently. AC type: window or wall unit.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17515/work_orders/19435"}, {"Property": "Mayor Apartments", "Unit": 3, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17433-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-19", "Description": "Tenant reports the closet door tracker is broken and the closet door is coming off the hinges.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17442/work_orders/19343"}, {"Property": "Mayor Apartments", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17348-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-08", "Description": "MASTER KEY: I was at the property this past weekend and the master lock key box was opened. Can we please get a key in there? Thanks team.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17357/work_orders/19230"}, {"Property": "Mayor Apartments", "Unit": 6, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17499-1", "AssignedUser": "Spencer Price", "CreatedAt": "2026-06-27", "Description": "Tenant reports an outside window insect screen (anti-bug net) was ripped off due to storms last week. Screen is on the bedroom window on the northeast side of the unit, right side of the window. Tenant requests repair before it gets worse; photo provided.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17508/work_orders/19428"}, {"Property": "Mckenzie", "Unit": "HOUSE", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17470-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-23", "Description": "Bedroom closet door is not functioning due to a structural problem with the track. Tenant reports the screw that is supposed to fit onto the track is sinking into the door, and the track/door needs replacement. A maintenance tech previously came out, observed the issue, and measured the closet door,", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17479/work_orders/19380"}, {"Property": "Mckenzie", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17356-1", "AssignedUser": null, "CreatedAt": "2026-06-09", "Description": "LOOSE CABLE: Hnaging from back. Xcel confirmed it's not theirs. Please remove.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17365/work_orders/19242"}, {"Property": "Mckenzie", "Unit": "HOUSE", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17488-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-25", "Description": "Stairway ceiling was dented and needs repair. Location: other.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17497/work_orders/19404"}, {"Property": "Mckenzie", "Unit": 308, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17522-1", "AssignedUser": "John Galloway", "CreatedAt": "2026-06-30", "Description": "In the primary (master) bathroom, the shower is not switching on to the shower head (diverter issue). Tenant also reports the tub is draining very slowly.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17531/work_orders/19460"}, {"Property": "Zephyr", "Unit": 21, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17452-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-21", "Description": "WATER STOPPER: Tenant Abner called in to request the change of the water stopper of the bathroom sink. -8504\n\nBest contact information: \nAbner J. Molina Viveros\nPhone Number\n(720) 371-1437", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17461/work_orders/19362"}, {"Property": "Zephyr", "Unit": 21, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17451-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-21", "Description": "BATHTUB - CRACKED: Tenant Abner called in to report that the dryer pain is peeling. Tenant is requesting a re painting. Tenant reported this as a cosmetic issue. -8504\n\nBest contact information: \nAbner J. Molina Viveros\nPhone Number\n(720) 371-1437", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17460/work_orders/19361"}, {"Property": "Zephyr", "Unit": 21, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17450-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-21", "Description": "DRYER: The tenant Abner called in to report that the dryer is on however it is not drying the clothes and are just taking coins. The dryer is located in the common area hallway. Make and model unknown. They already tried to reset the breakers. No sparking or smoking. -8504\n\nBest contact information:", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17459/work_orders/19360"}, {"Property": "Zephyr", "Unit": 11, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17383-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-15", "Description": "DOOR. Please repair damaged door.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17392/work_orders/19277"}, {"Property": "Zephyr", "Unit": 12, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17370-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-12", "Description": "CABINET DOOR: Needs to be screwed please.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17379/work_orders/19264"}, {"Property": "Zephyr", "Unit": 17, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17321-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-04", "Description": "PAINT: Tenant Carl called in to report that the paint in the bathtub is peeling off. - 8422\n\nBEST CONTACT:\nCarl D. Lewis\n(983) 444-3452", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17330/work_orders/19193"}, {"Property": "Zephyr", "Unit": 17, "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17320-1", "AssignedUser": "Chauncy Ursini", "CreatedAt": "2026-06-04", "Description": "FAUCET - LEAK: Tenant Carl called in to report that that faucet in their bathtub is leaking. The leak is actively flowing and the leak is containable since it goes down through the bathtub drain. Tenant cannot locate a shut off water valve to stop the leak. - 8422\n\nBEST CONTACT:\nCarl D. Lewis\n(983)", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17329/work_orders/19192"}, {"Property": "Zephyr", "Unit": "", "Status": "Assigned", "Priority": "Normal", "Type": "Resident", "WONumber": "17300-1", "AssignedUser": null, "CreatedAt": "2026-06-01", "Description": "STAIR RAILING: Molding is damaged at several posts. Please repair.", "URL": "https://situsgroup.appfolio.com/maintenance/service_requests/17309/work_orders/19159"}];
+
+let activePeople = new Set();
+let activeProp   = null;
+let activeTypes  = new Set();
+let sortCol = 'ageDays';
+let sortDir = -1;
+
+function showRefreshInstructions() {
+  alert('To refresh:\n\n1. Come back to this Claude chat\n2. Type: "Refresh my work order dashboard from Drive"\n3. Download the new file and replace this one\n\nYour data will reflect whatever is currently in the Google Drive file.');
+}
+
+// ---- FILTERING ----
+function buildTypeChips() {
+  const types = [...new Set(RAW.map(r => r.Type).filter(Boolean))].sort();
+  activeTypes = new Set(types);
+  const container = document.getElementById('type-chips');
+  container.innerHTML = '';
+  types.forEach(type => {
+    const btn = document.createElement('button');
+    btn.className = 'type-chip active';
+    btn.dataset.type = type;
+    btn.textContent = type;
+    btn.onclick = () => toggleType(type);
+    container.appendChild(btn);
+  });
+}
+
+function toggleType(type) {
+  if (activeTypes.has(type)) {
+    if (activeTypes.size === 1) return; // keep at least one
+    activeTypes.delete(type);
+  } else {
+    activeTypes.add(type);
+  }
+  document.querySelectorAll('.type-chip').forEach(c => {
+    c.classList.toggle('active', activeTypes.has(c.dataset.type));
+  });
+  applyFilters();
+}
+
+function getFiltered() {
+  const status   = document.getElementById('filter-status').value;
+  const priority = document.getElementById('filter-priority').value;
+  const search   = (document.getElementById('filter-search').value || '').toLowerCase();
+
+  return RAW.filter(r => {
+    if (status === 'open' && !OPEN_STATUSES.has(r.Status)) return false;
+    if (status && status !== 'open' && r.Status !== status) return false;
+    if (!activeTypes.has(r.Type)) return false;
+    if (priority && r.Priority !== priority) return false;
+    if (search) {
+      const hay = [r.WONumber, r.Description, r.Unit, r.Property, r.AssignedUser].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function applyFilters() {
+  const f = getFiltered();
+  const urgent = f.filter(r => r.Priority === 'Urgent').length;
+  document.getElementById('hdr-showing').textContent = f.length + ' records';
+  document.getElementById('hdr-urgent').textContent  = urgent + ' urgent';
+  buildSidebar(f);
+  renderCombined();
+}
+
+// ---- SIDEBAR ----
+function buildSidebar(rows) {
+  // Always build sidebar from ALL records so people/properties are always visible
+  const allRows = RAW;
+  // People
+  const pCounts = {};
+  allRows.forEach(r => {
+    if (!r.AssignedUser) return;
+    r.AssignedUser.split(',').map(p => p.trim()).filter(Boolean).forEach(p => {
+      pCounts[p] = (pCounts[p] || 0) + 1;
+    });
+  });
+  const peopleEl = document.getElementById('people-chips');
+  peopleEl.innerHTML = '';
+  Object.entries(pCounts).sort((a,b) => b[1]-a[1]).forEach(([name, cnt]) => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (activePeople.has(name) ? ' active' : '');
+    c.dataset.person = name;
+    c.innerHTML = name + `<span class="ct">${cnt}</span>`;
+    c.onclick = () => selectPerson(name);
+    peopleEl.appendChild(c);
+  });
+
+  // Properties
+  const prCounts = {};
+  allRows.forEach(r => { if (r.Property) prCounts[r.Property] = (prCounts[r.Property] || 0) + 1; });
+  const propEl = document.getElementById('prop-list');
+  propEl.innerHTML = '';
+  Object.entries(prCounts).sort((a,b) => a[0].localeCompare(b[0])).forEach(([name, cnt]) => {
+    const item = document.createElement('div');
+    item.className = 'prop-item' + (activeProp === name ? ' active' : '');
+    item.dataset.prop = name;
+    item.innerHTML = `<span class="prop-name" title="${name}">${name}</span><span class="prop-badge">${cnt}</span>`;
+    item.onclick = () => selectProperty(name);
+    propEl.appendChild(item);
+  });
+}
+
+// ---- SELECTION ----
+function selectPerson(name) {
+  if (activePeople.has(name)) activePeople.delete(name);
+  else activePeople.add(name);
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', activePeople.has(c.dataset.person)));
+  renderCombined();
+}
+
+function selectProperty(name) {
+  activeProp = activeProp === name ? null : name;
+  document.querySelectorAll('.prop-item').forEach(i => i.classList.toggle('active', i.dataset.prop === activeProp));
+  renderCombined();
+}
+
+function renderCombined() {
+  if (!activePeople.size && !activeProp) { showWelcome(); return; }
+  let rows = getFiltered();
+  if (activePeople.size) rows = rows.filter(r => r.AssignedUser && r.AssignedUser.split(',').map(p=>p.trim()).some(p => activePeople.has(p)));
+  if (activeProp)        rows = rows.filter(r => r.Property === activeProp);
+  const peoplePart = activePeople.size ? [...activePeople].join(', ') : null;
+  const title = [peoplePart, activeProp].filter(Boolean).join(' · ');
+  const subtitle = activePeople.size && activeProp
+    ? peoplePart + ' at ' + activeProp
+    : activePeople.size ? 'Assigned work orders' : 'All work orders';
+  renderView({ title, subtitle, rows, showProp: !activeProp, showAssignee: activePeople.size !== 1 });
+}
+
+function showWelcome() {
+  document.getElementById('main-content').innerHTML = `
+    <div class="welcome">
+      <div class="arrow">&#8592;</div>
+      <h2>Select a person and/or property</h2>
+      <p>Use the filters above to narrow by status, type, or priority &mdash; then click a person <strong>and/or</strong> a property on the left. Both can be active at once to narrow results further.</p>
+    </div>`;
+}
+
+// ---- RENDER TABLE ----
+function renderView({ title, subtitle, rows, showProp, showAssignee }) {
+  const open      = rows.filter(r => OPEN_STATUSES.has(r.Status)).length;
+  const urgent    = rows.filter(r => r.Priority === 'Urgent').length;
+  const completed = rows.filter(r => r.Status === 'Work Done' || r.Status === 'Completed').length;
+
+  const sorted = sortRows([...rows]);
+
+  const cols = [
+    { key: 'WONumber',     label: 'WO #' },
+    ...(showProp     ? [{ key: 'Property',    label: 'Property'   }] : []),
+    { key: 'Unit',         label: 'Unit'     },
+    { key: 'Status',       label: 'Status'   },
+    { key: 'Priority',     label: 'Priority' },
+    { key: 'Type',         label: 'Type'     },
+    { key: 'CreatedAt',    label: 'Created'  },
+    { key: 'ageDays',      label: 'Age'      },
+    ...(showAssignee ? [{ key: 'AssignedUser', label: 'Assigned To' }] : []),
+    { key: 'Description',  label: 'Description' },
+  ];
+
+  const ths = cols.map(c => {
+    const active = sortCol === c.key;
+    return `<th class="${active?'sorted':''}" onclick="resort('${c.key}')">${c.label}${active?(sortDir===1?' ▲':' ▼'):''}</th>`;
+  }).join('');
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const trs = sorted.map(r => {
+    const sKey = (r.Status||'').replace(/\s/g,'');
+    const sClass = { Assigned:'s-Assigned', New:'s-New', Scheduled:'s-Scheduled',
+                     WorkDone:'s-WorkDone', Completed:'s-Completed',
+                     Canceled:'s-Canceled', EstimateRequested:'s-Estimate' }[sKey] || '';
+    const woNum = r.URL
+      ? `<a class="wo-num" href="${r.URL}" target="_blank" rel="noopener">${r.WONumber||'—'}</a>`
+      : `<span class="wo-num">${r.WONumber||'—'}</span>`;
+    const link = r.URL ? `<a class="af-link" href="${r.URL}" target="_blank">Open in AppFolio ↗</a>` : '';
+    const age = r.ageDays != null ? r.ageDays : null;
+    const ageClass = age == null ? 'age-ok' : age >= 30 ? 'age-danger' : age >= 10 ? 'age-warn' : 'age-ok';
+    const ageLabel = age != null ? age + 'd' : '—';
+    const rowClass = age >= 30 ? 'row-danger' : age >= 10 ? 'row-warn' : '';
+    return `<tr class="${rowClass}">
+      <td>${woNum}${link}</td>
+      ${showProp ? `<td><span class="tag">${r.Property||'—'}</span></td>` : ''}
+      <td>${r.Unit!=null?r.Unit:'—'}</td>
+      <td><span class="status-pill ${sClass}">${r.Status||'—'}</span></td>
+      <td class="p-${r.Priority}">${r.Priority||'—'}</td>
+      <td>${r.Type||'—'}</td>
+      <td style="white-space:nowrap">${r.CreatedAt||'—'}</td>
+      <td><span class="age-pill ${ageClass}">${ageLabel}</span></td>
+      ${showAssignee ? `<td style="font-size:0.73rem">${r.AssignedUser||'<span style="color:var(--text-muted)">Unassigned</span>'}</td>` : ''}
+      <td><div class="desc-text">${r.Description||'—'}</div></td>
+    </tr>`;
+  }).join('');
+
+  const tableHtml = sorted.length === 0
+    ? '<div style="padding:40px;text-align:center;color:var(--text-muted)">No records match current filters</div>'
+    : `<div class="table-scroll"><table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
+
+  document.getElementById('main-content').innerHTML = `
+    <div class="view-header">
+      <div>
+        <div class="view-title">&#128205; ${title}</div>
+        <div class="view-subtitle">${subtitle}</div>
+      </div>
+      <button class="clear-btn" onclick="clearSel()">&#x2715; Clear</button>
+    </div>
+    <div class="summary-cards">
+      <div class="card"><div class="card-label">Total</div><div class="card-value">${rows.length}</div></div>
+      <div class="card"><div class="card-label">Open</div><div class="card-value red">${open}</div></div>
+      <div class="card"><div class="card-label">Urgent</div><div class="card-value amber">${urgent}</div></div>
+      <div class="card"><div class="card-label">Completed</div><div class="card-value green">${completed}</div></div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <span class="table-title">Work Orders</span>
+        <span class="results-count">${sorted.length} record${sorted.length!==1?'s':''}</span>
+      </div>
+      ${tableHtml}
+    </div>`;
+}
+
+function sortRows(rows) {
+  return rows.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (va==null && vb==null) return 0;
+    if (va==null) return 1; if (vb==null) return -1;
+    if (typeof va==='string') return va.localeCompare(vb)*sortDir;
+    return (va-vb)*sortDir;
+  });
+}
+
+function resort(col) {
+  if (sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; }
+  renderCombined();
+}
+
+function clearSel() {
+  activePeople.clear(); activeProp=null;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.prop-item').forEach(i=>i.classList.remove('active'));
+  showWelcome();
+}
+
+// Boot — pre-compute age in days for every record
+(function() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  RAW.forEach(r => {
+    if (r.CreatedAt) {
+      const d = new Date(r.CreatedAt);
+      r.ageDays = Math.floor((now - d) / 86400000);
+    } else {
+      r.ageDays = null;
+    }
+  });
+})();
+buildTypeChips();
+applyFilters();
+</script>
+</body>
+</html>
