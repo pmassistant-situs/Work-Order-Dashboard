@@ -1,0 +1,41 @@
+name: Refresh Work Order Dashboard
+
+on:
+  schedule:
+    # Runs every weekday at 17:30 UTC = 11:30 AM Mountain Daylight Time (summer)
+    # or 10:30 AM Mountain Standard Time (winter). Sheet is saved ~9:30 AM Mountain,
+    # so this gives a 1-2 hour buffer either way. Cron doesn't auto-adjust for DST,
+    # so the exact Mountain-time equivalent shifts by an hour twice a year.
+    - cron: '30 17 * * 1-5'
+  workflow_dispatch: # Also allows manual trigger from GitHub Actions UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas openpyxl
+
+      - name: Run refresh script
+        env:
+          DRIVE_FILE_ID: 1KaMScsd7By3MCBjI-Zc0MTpjgvwA9Bz-
+        run: python refresh_dashboard.py
+
+      - name: Commit and push updated dashboard
+        run: |
+          git config user.name  "Dashboard Bot"
+          git config user.email "bot@thesitusgroup.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "Dashboard refresh $(date -u +'%Y-%m-%d')"
+          git push
