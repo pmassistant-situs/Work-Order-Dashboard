@@ -17,7 +17,7 @@
   header h1 { font-size: 1.15rem; font-weight: 700; }
   .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .data-info { font-size: 0.72rem; opacity: 0.85; margin-top: 2px; }
-  .refresh-btn { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.4); color: #fff; border-radius: 8px; padding: 6px 16px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; font-weight: 600; }
+  .refresh-btn { background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.4); color: #fff; border-radius: 8px; padding: 6px 16px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; font-weight: 600; text-decoration: none; display: inline-block; }
   .refresh-btn:hover { background: rgba(255,255,255,0.28); }
 
   .refresh-banner { background: #1e40af; color: #bfdbfe; padding: 10px 20px; font-size: 0.8rem; display: flex; align-items: center; gap: 10px; }
@@ -125,13 +125,13 @@
     <div class="data-info" id="data-info">Data as of DATE_PLACEHOLDER &mdash; COUNT_PLACEHOLDER work orders</div>
   </div>
   <div class="header-right">
-    <button class="refresh-btn" onclick="showRefreshInstructions()">&#8635; Refresh Data</button>
+    <a class="refresh-btn" href="https://github.com/pmassistant-situs/Work-Order-Dashboard/actions/workflows/refresh.yml" target="_blank" rel="noopener">&#8635; Refresh Data</a>
   </div>
 </header>
 
 <div class="refresh-banner">
   <span>&#128337;</span>
-  <span><strong>To get the latest data:</strong> click <em>Refresh Data</em> above, then ask Claude to regenerate this dashboard from the updated Drive file. A new file will be ready to replace this one.</span>
+  <span><strong>Data updates automatically</strong> each weekday morning around 9:40 AM Mountain Time. Need it sooner? Click <em>Refresh Data</em> to open GitHub Actions, then click "Run workflow" for an immediate update.</span>
 </div>
 
 <div class="filter-bar">
@@ -200,9 +200,7 @@ let activeTypes  = new Set();
 let sortCol = 'ageDays';
 let sortDir = -1;
 
-function showRefreshInstructions() {
-  alert('To refresh:\n\n1. Come back to this Claude chat\n2. Type: "Refresh my work order dashboard from Drive"\n3. Download the new file and replace this one\n\nYour data will reflect whatever is currently in the Google Drive file.');
-}
+// (manual refresh now handled via the Refresh Data link to GitHub Actions)
 
 // ---- FILTERING ----
 function buildTypeChips() {
