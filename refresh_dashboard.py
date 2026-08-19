@@ -5,9 +5,9 @@ Pulls work order data from a Google Sheet (shared as "anyone with the link
 can view") by hitting Google's built-in XLSX export endpoint — no OAuth
 or service account needed.
 
-Handles two AppFolio export formats:
-  Format A: header row present (has PropertyAbbrev + Assigned User columns)
-  Format B: AppFolio scheduled report (full history, property+address in col 0, no header row)
+Reads the 'PowerQueryresult' tab, which holds the full unfiltered work
+order history (the 'PivotTable' tab has a built-in slicer that silently
+excludes non-residential properties, so we don't use it as the source).
 """
 
 import os, math, tempfile, re
@@ -17,10 +17,12 @@ import urllib.request
 # ---- CONFIG ----
 # Set DRIVE_FILE_ID as a repo variable/secret if you ever swap sheets;
 # otherwise this default is used.
-DRIVE_FILE_ID = os.environ.get("DRIVE_FILE_ID", "1KaMScsd7By3MCBjI-Zc0MTpjgvwA9Bz-")
+DRIVE_FILE_ID = os.environ.get("DRIVE_FILE_ID", "1xhjrKwC9bHKAdYDVfNj3TUfM09qT4RKv")
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{DRIVE_FILE_ID}/export?format=xlsx"
 
 OPEN_STATUSES = {'Assigned', 'New', 'Scheduled', 'Estimate Requested'}
+TARGET_SHEET = "PowerQueryresult"  # full unfiltered work order history (PivotTable tab has a
+                                    # built-in slicer that silently excludes non-residential properties)
 
 # ---- 1. DOWNLOAD XLSX FROM GOOGLE SHEET (public export link) ----
 def download_sheet():
@@ -40,9 +42,6 @@ def download_sheet():
     return data
 
 # ---- 2. PROCESS XLSX ----
-TARGET_SHEET = "PowerQueryresult"  # full unfiltered work order history (PivotTable tab has a
-                                    # built-in slicer that silently excludes non-residential properties)
-
 def process_xlsx(xlsx_bytes):
     import pandas as pd
 
@@ -97,7 +96,7 @@ def process_xlsx(xlsx_bytes):
                 "Unit":         clean(row.get("Unit")),
                 "Status":       status,
                 "Priority":     clean(row.get("Priority")),
-                "Type":         clean(row.get("Work Order Type")),
+                "Type":         wo_type,
                 "WONumber":     wo,
                 "AssignedUser": clean(row.get("Assigned User")),
                 "CreatedAt":    str(row.get("Created At", ""))[:10] if row.get("Created At") else None,
@@ -118,10 +117,6 @@ def process_xlsx(xlsx_bytes):
                 data_start = i
                 print(f"  Data starts at row {i}")
                 break
-
-        # Confirmed col layout from live logs:
-        # 0=Property(full+address), 1=Priority, 2=WOType, 3=WONumber, 4=Status,
-        # 5=Unit, 6=CreatedAt, 7=CreatedBy, 8=AssignedUser, 16=JobDescription
 
         records = []
         for i in range(data_start, len(raw)):
