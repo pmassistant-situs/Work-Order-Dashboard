@@ -2,11 +2,15 @@ name: Refresh Work Order Dashboard
 
 on:
   schedule:
-    # Runs every weekday at 17:30 UTC = 11:30 AM Mountain Daylight Time (summer)
-    # or 10:30 AM Mountain Standard Time (winter). Sheet is saved ~9:30 AM Mountain,
-    # so this gives a 1-2 hour buffer either way. Cron doesn't auto-adjust for DST,
-    # so the exact Mountain-time equivalent shifts by an hour twice a year.
-    - cron: '30 17 * * 1-5'
+    # Target: 9:40 AM Mountain Time daily — 20 min after the 9:30 AM save,
+    # 20 min before the 10 AM tech-notification deadline.
+    # Cron doesn't auto-adjust for DST, so we schedule BOTH UTC equivalents:
+    #   15:40 UTC = 9:40 AM MDT (summer, UTC-6) — correct Mar-Nov
+    #   16:40 UTC = 9:40 AM MST (winter, UTC-7) — correct Nov-Mar
+    # The "wrong" one for the current season just runs early/late and is
+    # harmless — the correct one always lands in the window before 10 AM.
+    - cron: '40 15 * * 1-5'
+    - cron: '40 16 * * 1-5'
   workflow_dispatch: # Also allows manual trigger from GitHub Actions UI
 
 jobs:
@@ -29,7 +33,7 @@ jobs:
 
       - name: Run refresh script
         env:
-          DRIVE_FILE_ID: 1KaMScsd7By3MCBjI-Zc0MTpjgvwA9Bz-
+          DRIVE_FILE_ID: 1xhjrKwC9bHKAdYDVfNj3TUfM09qT4RKv
         run: python refresh_dashboard.py
 
       - name: Commit and push updated dashboard
