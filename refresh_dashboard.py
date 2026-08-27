@@ -1,37 +1,34 @@
 #!/usr/bin/env python3
 """
-Work Order Dashboard - Auto Refresh Script
-Pulls work order data from a Google Sheet (shared as "anyone with the link
-can view") by hitting Google's built-in XLSX export endpoint — no OAuth
-or service account needed.
+Work Order Dashboard - Automated Refresh Script (v5 — GitHub Actions)
+Pulls the daily work-order workbook directly from Google Drive (shared as
+"anyone with the link can view") via Google's public XLSX export endpoint —
+no OAuth/service account needed.
 
-Reads the 'PowerQueryresult' tab, which holds the full unfiltered work
-order history (the 'PivotTable' tab has a built-in slicer that silently
-excludes non-residential properties, so we don't use it as the source).
+Reads directly from the 'AppFolioReport' tab (the raw AppFolio Report
+Builder export) inside the 'Work Orders - Daily Summary' workbook, rather
+than the derived 'PowerQueryresult' tab. This has two advantages:
+  1. The AppFolio work order link is constructed directly from the
+     Work Order ID + Service Request ID columns already present here —
+     no dependency on a Power Query formula elsewhere in the workbook.
+  2. If Vendor / Primary Resident Phone Number / Primary Resident Email
+     are ever added as extra columns to that same Report Builder export,
+     this script picks them up automatically — no second file needed.
 """
 
-import os, math, tempfile, re
-from datetime import datetime, timezone
-import urllib.request
+import os, math, tempfile, urllib.request
 
-# ---- CONFIG ----
-# Set DRIVE_FILE_ID as a repo variable/secret if you ever swap sheets;
-# otherwise this default is used.
 DRIVE_FILE_ID = os.environ.get("DRIVE_FILE_ID", "1xhjrKwC9bHKAdYDVfNj3TUfM09qT4RKv")
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{DRIVE_FILE_ID}/export?format=xlsx"
 
-OPEN_STATUSES = {'Assigned', 'New', 'Scheduled', 'Estimate Requested'}
-TARGET_SHEET = "PowerQueryresult"  # full unfiltered work order history (PivotTable tab has a
-                                    # built-in slicer that silently excludes non-residential properties)
+OPEN_STATUSES = {'Assigned', 'Scheduled'}
+APPFOLIO_SUBDOMAIN = "situsgroup"  # https://situsgroup.appfolio.com/...
 
-# ---- 1. DOWNLOAD XLSX FROM GOOGLE SHEET (public export link) ----
 def download_sheet():
     print(f"  Downloading sheet export (file ID: {DRIVE_FILE_ID})")
     req = urllib.request.Request(EXPORT_URL, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req) as r:
         data = r.read()
-    # A private/broken-link sheet returns a small HTML login/error page instead
-    # of real xlsx bytes, so we sanity-check size + the xlsx zip signature (PK).
     if not data or len(data) < 1000 or not data.startswith(b"PK"):
         raise Exception(
             "Downloaded file doesn't look like a valid XLSX export. "
@@ -41,7 +38,32 @@ def download_sheet():
     print(f"  Downloaded {len(data):,} bytes")
     return data
 
-# ---- 2. PROCESS XLSX ----
+def clean(v):
+    if v is None: return None
+    if isinstance(v, float) and math.isnan(v): return None
+    if hasattr(v, "isoformat"): return str(v)[:10]
+    s = str(v).strip() if not isinstance(v, (int, float)) else v
+    if isinstance(s, str) and s.lower() in ('nan', ''):
+        return None
+    return s
+
+def clean_text(v, maxlen):
+    if v is None:
+        return None
+    s = str(v).replace('_x000D_', ' ').replace('\r', ' ').replace('\n', ' ')
+    s = ' '.join(s.split())
+    return s[:maxlen].strip() or None
+
+def build_url(work_order_id, service_request_id):
+    if not work_order_id or not service_request_id:
+        return None
+    try:
+        woid = int(float(work_order_id))
+        srid = int(float(service_request_id))
+    except (ValueError, TypeError):
+        return None
+    return f"https://{APPFOLIO_SUBDOMAIN}.appfolio.com/maintenance/service_requests/{srid}/work_orders/{woid}"
+
 def process_xlsx(xlsx_bytes):
     import pandas as pd
 
@@ -50,118 +72,67 @@ def process_xlsx(xlsx_bytes):
         tmp_path = f.name
 
     xl = pd.ExcelFile(tmp_path)
-    if TARGET_SHEET in xl.sheet_names:
-        sheet = TARGET_SHEET
-    else:
-        sheet = xl.sheet_names[0]
-        print(f"  ⚠️  '{TARGET_SHEET}' tab not found — falling back to first tab '{sheet}'. "
-              f"Available tabs: {xl.sheet_names}")
-
+    sheet = "AppFolioReport" if "AppFolioReport" in xl.sheet_names else xl.sheet_names[0]
     raw = pd.read_excel(tmp_path, sheet_name=sheet, header=None)
     print(f"  Reading sheet '{sheet}' — raw shape: {raw.shape}")
 
-    def clean(v):
-        if v is None: return None
-        if isinstance(v, float) and math.isnan(v): return None
-        if hasattr(v, "isoformat"): return str(v)[:10]
-        return str(v).strip() if not isinstance(v, (int, float)) else v
-
-    # ---- Detect format ----
-    # Format A: has a header row with 'PropertyAbbrev' and 'Assigned User'
+    # Detect header row dynamically (metadata rows at top vary in count)
     header_row = None
-    for i in range(min(30, len(raw))):
+    for i in range(min(20, len(raw))):
         row_vals = [str(v).strip() for v in raw.iloc[i].tolist()]
-        if 'PropertyAbbrev' in row_vals and 'Assigned User' in row_vals:
+        if 'Property' in row_vals and 'Work Order Number' in row_vals:
             header_row = i
-            print(f"  Format A detected — header at row {i}")
+            print(f"  Header detected at row {i}")
             break
+    if header_row is None:
+        raise Exception("Could not find header row (expected 'Property' + 'Work Order Number' columns)")
 
-    if header_row is not None:
-        # Format A processing — read by column name, not position
-        df = pd.read_excel(tmp_path, sheet_name=sheet, header=header_row)
-        df['PropertyAbbrev'] = df['PropertyAbbrev'].ffill()
-        records = []
-        for _, row in df.iterrows():
-            wo = clean(row.get("Work Order Number"))
-            status = clean(row.get("Status"))
-            if not wo or not status:
-                continue
-            if status not in OPEN_STATUSES:
-                continue
-            wo_type = clean(row.get("Work Order Type"))
-            if wo_type == "Unit Turn":
-                continue
-            r = {
-                "Property":     clean(row.get("PropertyAbbrev")),
-                "Unit":         clean(row.get("Unit")),
-                "Status":       status,
-                "Priority":     clean(row.get("Priority")),
-                "Type":         wo_type,
-                "WONumber":     wo,
-                "AssignedUser": clean(row.get("Assigned User")),
-                "CreatedAt":    str(row.get("Created At", ""))[:10] if row.get("Created At") else None,
-                "Description":  str(row.get("Service Request Description", "") or "")[:300].strip() or None,
-                "URL":          clean(row.get("AppFolio Link")) or clean(row.get("WorkOrderURLLink")) or clean(row.get("Link")),
-            }
-            records.append(r)
+    df = pd.read_excel(tmp_path, sheet_name=sheet, header=header_row)
+    df.columns = [str(c).strip() for c in df.columns]
 
-    else:
-        # Format B: AppFolio scheduled report — positional parsing fallback
-        print("  Format B detected — AppFolio scheduled report, parsing by position")
+    has_vendor = "Vendor" in df.columns
+    has_phone  = "Primary Resident Phone Number" in df.columns
+    has_email  = "Primary Resident Email" in df.columns
+    if not (has_vendor and has_phone and has_email):
+        print("  ℹ️  Vendor/Phone/Email columns not present in this export — "
+              "add them to the AppFolio Report Builder query to include them here.")
 
-        data_start = 0
-        wo_pattern = re.compile(r'^\d{4,6}-\d+$')
-        for i in range(len(raw)):
-            val = str(raw.iloc[i, 3]).strip()
-            if wo_pattern.match(val):
-                data_start = i
-                print(f"  Data starts at row {i}")
-                break
+    records = []
+    for _, row in df.iterrows():
+        wo = clean(row.get("Work Order Number"))
+        status = clean(row.get("Status"))
+        if not wo or not status:
+            continue
+        if status not in OPEN_STATUSES:
+            continue
+        wo_type = clean(row.get("Work Order Type"))
+        if wo_type == "Unit Turn":
+            continue
 
-        records = []
-        for i in range(data_start, len(raw)):
-            row = [clean(v) for v in raw.iloc[i].tolist()]
+        prop_abbrev = clean(row.get("PropertyAbbrev."))
+        prop_full = clean(row.get("Property"))
+        prop = prop_abbrev or (prop_full.split(' - ')[0].strip() if prop_full and ' - ' in prop_full else prop_full)
 
-            wo = str(row[3]).strip() if len(row) > 3 and row[3] else None
-            if not wo or not wo_pattern.match(wo):
-                continue
-
-            status = str(row[4]).strip() if len(row) > 4 and row[4] else None
-            if not status or status not in OPEN_STATUSES:
-                continue
-
-            prop_raw = str(row[0]).strip() if row[0] else None
-            if prop_raw and ' - ' in prop_raw:
-                prop = prop_raw.split(' - ')[0].strip()
-            elif prop_raw and prop_raw.lower() != 'nan':
-                prop = prop_raw
-            else:
-                prop = None
-
-            assigned = str(row[8]).strip() if len(row) > 8 and row[8] and str(row[8]).lower() != 'nan' else None
-            desc = str(row[16])[:300].strip() if len(row) > 16 and row[16] and str(row[16]).lower() != 'nan' else None
-
-            url = str(row[0]).strip() if row[0] and str(row[0]).startswith('http') else None
-            if url and 'appfolio' not in url:
-                url = None
-
-            r = {
-                "Property":     prop,
-                "Unit":         str(row[5]).strip() if len(row) > 5 and row[5] and str(row[5]).lower() != 'nan' else None,
-                "Status":       status,
-                "Priority":     str(row[1]).strip() if len(row) > 1 and row[1] else None,
-                "Type":         str(row[2]).strip() if len(row) > 2 and row[2] else None,
-                "WONumber":     wo,
-                "AssignedUser": assigned,
-                "CreatedAt":    str(row[6])[:10] if len(row) > 6 and row[6] else None,
-                "Description":  desc,
-                "URL":          url,
-            }
-            records.append(r)
+        r = {
+            "Property":     prop,
+            "Unit":         clean(row.get("Unit")),
+            "Status":       status,
+            "Priority":     clean(row.get("Priority")),
+            "Type":         wo_type,
+            "WONumber":     wo,
+            "AssignedUser": clean(row.get("Assigned User")),
+            "Vendor":       clean(row.get("Vendor")) if has_vendor else None,
+            "CreatedAt":    str(row.get("Created At", ""))[:10] if row.get("Created At") else None,
+            "Description":  clean_text(row.get("Service Request Description") or row.get("Job Description"), 400),
+            "StatusNotes":  clean_text(row.get("Status Notes"), 300),
+            "Phone":        clean(row.get("Primary Resident Phone Number")) if has_phone else None,
+            "Email":        clean(row.get("Primary Resident Email")) if has_email else None,
+            "URL":          build_url(row.get("Work Order ID"), row.get("Service Request ID")),
+        }
+        records.append(r)
 
     os.unlink(tmp_path)
 
-    # Deduplicate — merge rows with same WO number, combining assigned users
     seen = {}
     for r in records:
         wo = r['WONumber']
@@ -172,14 +143,12 @@ def process_xlsx(xlsx_bytes):
             new_user = r['AssignedUser'] or ''
             if new_user and new_user not in existing:
                 seen[wo]['AssignedUser'] = (existing + ', ' + new_user).strip(', ')
-            if r['Description'] and (not seen[wo]['Description'] or len(r['Description']) > len(seen[wo]['Description'])):
-                seen[wo]['Description'] = r['Description']
-
     records = list(seen.values())
-    print(f"  Valid records after dedup: {len(records)}")
+
+    with_url = sum(1 for r in records if r['URL'])
+    print(f"  Valid records after dedup: {len(records)}  (with working link: {with_url})")
     return records
 
-# ---- 3. BUILD DASHBOARD ----
 def build_dashboard(records, date_str):
     import json
     with open("dashboard_template.html") as f:
@@ -189,8 +158,9 @@ def build_dashboard(records, date_str):
     html = html.replace("COUNT_PLACEHOLDER", str(len(records)))
     return html
 
-# ---- MAIN ----
 if __name__ == "__main__":
+    from datetime import datetime, timezone
+
     print("📥 Downloading sheet from Google Drive...")
     xlsx_bytes = download_sheet()
 
